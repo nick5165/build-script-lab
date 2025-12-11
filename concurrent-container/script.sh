@@ -4,15 +4,15 @@ SHARED_DIR="/data"
 LOCK_FILE="$SHARED_DIR/.lock"
 CONTAINER_ID="$(hostname)-$(cat /proc/sys/kernel/random/uuid | cut -c1-8)"
 COUNTER=1
+TEMP_STATE_FILE="/tmp/current_filename"
 
 cleanup(){
-    echo "Container stopped. Cleaning up..."
-    if [ -f "/tmp/current_filename" ]; then
-        CURRENT_FILE=$(cat /tmp/current_filename)
-        if [ -f "$SHARED_DIR/$CURRENT_FILE" ]; then
+    if [ -f "$TEMP_STATE_FILE" ]; then
+        CURRENT_FILE=$(cat "$TEMP_STATE_FILE")
+        if [ -n "$CURRENT_FILE" ] && [ -f "$SHARED_DIR/$CURRENT_FILE" ]; then
             rm "$SHARED_DIR/$CURRENT_FILE"
-            echo "Deleted orphan file $CURRENT_FILE"
         fi
+        rm -f "$TEMP_STATE_FILE"
     fi
     exit 0
 }
@@ -23,34 +23,38 @@ touch "$LOCK_FILE"
 echo "Container $CONTAINER_ID started"
 
 while true; do
-    MY_FILE=""
+    rm -f "$TEMP_STATE_FILE"
+
     (
         flock -x 200
         i=1
         while true; do
-        NAME=$(printf "%03d" "$i")
-        FILE_PATH="$SHARED_DIR/$NAME"
+            NAME=$(printf "%03d" "$i")
+            FILE_PATH="$SHARED_DIR/$NAME"
 
-        if [ ! -e "$FILE_PATH" ]; then
-            echo "$CONTAINER_ID $COUNTER" > "$FILE_PATH"
-            echo "$NAME" > /tmp/current_filename
-            break
-        fi 
-        i=$((i + 1))
-    done
+            if [ ! -e "$FILE_PATH" ]; then
+                echo "$CONTAINER_ID $COUNTER" > "$FILE_PATH"
+                echo "$NAME" > "$TEMP_STATE_FILE"
+                break
+            fi 
+            i=$((i + 1))
+        done
     ) 200>"$LOCK_FILE"
 
-    MY_FILE=$(cat /tmp/current_filename)
+    if [ -f "$TEMP_STATE_FILE" ]; then
+        MY_FILE=$(cat "$TEMP_STATE_FILE")
+        
+        echo "[Create] $CONTAINER_ID created $MY_FILE (Seq: $COUNTER)"
 
-    echo "[Create] $CONTAINER_ID created $MY_FILE (Seq: $COUNTER)"
+        sleep 1
 
-    sleep 1
+        if [ -f "$SHARED_DIR/$MY_FILE" ]; then
+            rm "$SHARED_DIR/$MY_FILE"
+            echo "[Delete] $CONTAINER_ID deleted $MY_FILE"
+        fi
 
-    if [ -f "$SHARED_DIR/$MY_FILE" ]; then
-        rm "$SHARED_DIR/$MY_FILE"
-        echo "[Delete] $CONTAINER_ID deleted $MY_FILE"
+        rm -f "$TEMP_STATE_FILE"
+        COUNTER=$((COUNTER + 1))
     fi
-
-    COUNTER=$((COUNTER + 1))
 
 done
