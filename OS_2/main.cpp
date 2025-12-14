@@ -54,7 +54,6 @@ int main() {
 
     struct sigaction sa{};
     sa.sa_handler = signal_handler;
-    // ИСПРАВЛЕНИЕ ЗДЕСЬ: Добавлен флаг SA_RESTART
     sa.sa_flags = SA_RESTART; 
     sigaction(SIGHUP, &sa, nullptr);
 
