@@ -54,7 +54,8 @@ int main() {
 
     struct sigaction sa{};
     sa.sa_handler = signal_handler;
-    sa.sa_flags = 0;
+    // ИСПРАВЛЕНИЕ ЗДЕСЬ: Добавлен флаг SA_RESTART
+    sa.sa_flags = SA_RESTART; 
     sigaction(SIGHUP, &sa, nullptr);
 
     cout << "Server started on port 8080. PID: " << getpid() << endl;
